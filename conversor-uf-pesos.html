@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Conversor Pesos ↔ UF</title>
+<style>
+  :root {
+    --bg: #0f172a;
+    --card: #1e293b;
+    --accent: #38bdf8;
+    --text: #f1f5f9;
+    --muted: #94a3b8;
+    --border: #334155;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    padding: 20px;
+  }
+  .card {
+    width: 100%;
+    max-width: 420px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 28px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+  }
+  h1 {
+    font-size: 1.3rem;
+    margin: 0 0 4px;
+    text-align: center;
+  }
+  .subtitle {
+    text-align: center;
+    color: var(--muted);
+    font-size: 0.85rem;
+    margin-bottom: 24px;
+  }
+  .uf-value {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: #0f1c30;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 14px;
+    margin-bottom: 20px;
+    font-size: 0.85rem;
+  }
+  .uf-value label { color: var(--muted); }
+  .uf-value-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  #ufRate {
+    width: 110px;
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid var(--border);
+    color: var(--text);
+    text-align: right;
+    font-size: 0.9rem;
+    padding: 2px 4px;
+  }
+  #ufRate:focus { outline: none; border-color: var(--accent); }
+  #refreshBtn {
+    background: none;
+    border: none;
+    color: var(--accent);
+    cursor: pointer;
+    font-size: 1rem;
+    padding: 2px 4px;
+  }
+  #refreshBtn:disabled { opacity: 0.4; cursor: default; }
+  .field {
+    margin-bottom: 18px;
+  }
+  .field label {
+    display: block;
+    font-size: 0.8rem;
+    color: var(--muted);
+    margin-bottom: 6px;
+  }
+  .input-wrap {
+    display: flex;
+    align-items: center;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: #0f1c30;
+    overflow: hidden;
+  }
+  .input-wrap span {
+    padding: 12px 14px;
+    color: var(--muted);
+    font-weight: 600;
+    border-right: 1px solid var(--border);
+    font-size: 0.9rem;
+  }
+  .input-wrap input {
+    flex: 1;
+    border: none;
+    background: transparent;
+    color: var(--text);
+    font-size: 1.1rem;
+    padding: 12px 14px;
+    min-width: 0;
+  }
+  .input-wrap input:focus { outline: none; }
+  .swap {
+    text-align: center;
+    color: var(--muted);
+    font-size: 1.2rem;
+    margin: -6px 0 14px;
+  }
+  .status {
+    text-align: center;
+    font-size: 0.75rem;
+    color: var(--muted);
+    margin-top: 10px;
+    min-height: 16px;
+  }
+</style>
+</head>
+<body>
+  <div class="card">
+    <h1>Conversor Pesos ↔ UF</h1>
+    <div class="subtitle">Chile</div>
+
+    <div class="uf-value">
+      <label for="ufRate">Valor UF hoy (CLP)</label>
+      <div class="uf-value-row">
+        <input id="ufRate" type="text" inputmode="decimal" value="37000">
+        <button id="refreshBtn" title="Actualizar desde mindicador.cl">⟳</button>
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="clpInput">Pesos chilenos</label>
+      <div class="input-wrap">
+        <span>$</span>
+        <input id="clpInput" type="text" inputmode="decimal" placeholder="0">
+      </div>
+    </div>
+
+    <div class="swap">⇅</div>
+
+    <div class="field">
+      <label for="ufInput">UF</label>
+      <div class="input-wrap">
+        <span>UF</span>
+        <input id="ufInput" type="text" inputmode="decimal" placeholder="0">
+      </div>
+    </div>
+
+    <div class="status" id="status"></div>
+  </div>
+
+<script>
+  const ufRateEl = document.getElementById('ufRate');
+  const clpEl = document.getElementById('clpInput');
+  const ufEl = document.getElementById('ufInput');
+  const statusEl = document.getElementById('status');
+  const refreshBtn = document.getElementById('refreshBtn');
+
+  function parseNumber(str) {
+    if (!str) return NaN;
+    const cleaned = str.replace(/\./g, '').replace(',', '.').replace(/[^0-9.]/g, '');
+    return parseFloat(cleaned);
+  }
+
+  function formatCLP(n) {
+    return Math.round(n).toLocaleString('es-CL');
+  }
+
+  function formatUF(n) {
+    return n.toLocaleString('es-CL', { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+  }
+
+  function getUfRate() {
+    const v = parseNumber(ufRateEl.value);
+    return isNaN(v) || v <= 0 ? null : v;
+  }
+
+  let lastEdited = 'clp';
+
+  function recalc() {
+    const rate = getUfRate();
+    if (!rate) return;
+
+    if (lastEdited === 'clp') {
+      const clp = parseNumber(clpEl.value);
+      if (!isNaN(clp)) {
+        ufEl.value = formatUF(clp / rate);
+      } else {
+        ufEl.value = '';
+      }
+    } else {
+      const uf = parseNumber(ufEl.value);
+      if (!isNaN(uf)) {
+        clpEl.value = formatCLP(uf * rate);
+      } else {
+        clpEl.value = '';
+      }
+    }
+  }
+
+  clpEl.addEventListener('input', () => { lastEdited = 'clp'; recalc(); });
+  ufEl.addEventListener('input', () => { lastEdited = 'uf'; recalc(); });
+  ufRateEl.addEventListener('input', recalc);
+
+  async function fetchUfRate() {
+    refreshBtn.disabled = true;
+    statusEl.textContent = 'Actualizando valor UF...';
+    try {
+      const res = await fetch('https://mindicador.cl/api/uf');
+      if (!res.ok) throw new Error('respuesta no ok');
+      const data = await res.json();
+      const valor = data && data.serie && data.serie[0] && data.serie[0].valor;
+      const fecha = data && data.serie && data.serie[0] && data.serie[0].fecha;
+      if (valor) {
+        ufRateEl.value = valor.toFixed(2);
+        const fechaStr = fecha ? new Date(fecha).toLocaleDateString('es-CL') : '';
+        statusEl.textContent = `UF actualizada${fechaStr ? ' al ' + fechaStr : ''}`;
+        recalc();
+      } else {
+        throw new Error('sin datos');
+      }
+    } catch (err) {
+      statusEl.textContent = 'No se pudo obtener la UF automáticamente. Ingrésala manualmente.';
+    } finally {
+      refreshBtn.disabled = false;
+    }
+  }
+
+  refreshBtn.addEventListener('click', fetchUfRate);
+  window.addEventListener('load', fetchUfRate);
+</script>
+</body>
+</html>
